@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- ✏️ EDIT: judul tab browser -->
+<title>Untukmu 💜</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&display=swap" rel="stylesheet">
+
+<style>
+  /* ============================================================
+     🎨 PALET WARNA — ganti kode hex di sini
+     (warna partikel hujan diatur terpisah di script: WARNA_PARTIKEL)
+     ============================================================ */
+  :root {
+    --bg-atas:   #2b1250;  /* latar: ungu gelap di bagian tengah-atas */
+    --bg-bawah:  #12071f;  /* latar: ungu hampir hitam di tepi layar */
+    --teks:      #ffffff;  /* warna teks utama */
+    --cahaya:    #b794f6;  /* cahaya (glow) di sekitar teks */
+    --aksen:     #d9c2ff;  /* teks kecil (petunjuk) */
+    --tombol:    #8b5cf6;  /* warna tombol */
+    --font:      "Fredoka", "Trebuchet MS", sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+
+  body {
+    font-family: var(--font); color: var(--teks); overflow: hidden;
+    background: radial-gradient(ellipse at 50% 30%, var(--bg-atas), var(--bg-bawah) 75%);
+  }
+
+  /* Kanvas hujan partikel (di belakang teks) */
+  #hujan { position: fixed; inset: 0; width: 100%; height: 100%; }
+
+  /* Tempat teks yang diketik */
+  #panggung {
+    position: fixed; inset: 0; display: grid; place-items: center;
+    padding: 24px; text-align: center; transition: opacity 2.5s;
+  }
+  #panggung.pudar { opacity: 0; }
+  #teks {
+    max-width: 20em; min-height: 1.3em; font-weight: 600; line-height: 1.3;
+    font-size: clamp(1.6rem, 6vw, 3.2rem);   /* ✏️ EDIT: ukuran teks (kecil, ideal, besar) */
+    text-shadow: 0 0 18px var(--cahaya), 0 0 40px var(--cahaya);
+  }
+  /* Kursor berkedip di ujung teks */
+  #teks::after { content: "|"; margin-left: 3px; opacity: .8; animation: kedip .8s steps(1) infinite; }
+  @keyframes kedip { 50% { opacity: 0; } }
+
+  /* Penghitung detik (hanya muncul kalau TAMPILKAN_WAKTU = true) */
+  #penghitung {
+    position: fixed; top: 10px; left: 12px; z-index: 7; padding: 4px 10px; border-radius: 999px;
+    background: rgba(0, 0, 0, .5); color: var(--aksen); font: 600 .9rem monospace;
+  }
+  #penghitung[hidden] { display: none; }
+
+  /* Layar awal & layar akhir */
+  .layar {
+    position: fixed; inset: 0; z-index: 5; display: grid; place-content: center; justify-items: center; gap: 14px;
+    text-align: center; padding: 24px; transition: opacity .8s;
+  }
+  .layar[hidden] { display: none; }
+  .layar.hilang { opacity: 0; pointer-events: none; }
+  .layar h1 { font-weight: 600; font-size: clamp(1.8rem, 6vw, 2.6rem); text-shadow: 0 0 18px var(--cahaya); }
+  .layar p { color: var(--aksen); }
+
+  button {
+    margin-top: 6px; padding: 12px 30px; border: 2px solid var(--aksen); border-radius: 999px; cursor: pointer;
+    background: var(--tombol); color: #fff; font: 600 1.1rem var(--font);
+    box-shadow: 0 0 24px var(--cahaya); transition: transform .15s;
+  }
+  button:hover { transform: scale(1.06); }
+  button:focus-visible { outline: 4px solid var(--aksen); outline-offset: 3px; }
+</style>
+</head>
+
+<body>
+
+<!-- ============================================================
+     🎵 MUSIK
+     Cara memasukkan / mengganti MP3:
+       1. Buat folder "musik" di sebelah file index.html ini.
+       2. Taruh lagu di dalamnya, misalnya musik/lagu.mp3
+       3. Samakan nama file di src di bawah (huruf besar/kecil harus sama,
+          hindari spasi di nama file).
+     Struktur folder:
+       index.html
+       musik/
+       └── lagu.mp3
+     ✏️ EDIT: ganti "musik/lagu.mp3" dengan lokasi file lagumu.
+     ============================================================ -->
+<audio id="lagu" src="laguu.mp3" preload="auto"></audio>
+
+<canvas id="hujan"></canvas>
+<div id="penghitung" hidden>0.0 dtk</div>
+
+<!-- Teks yang diketik huruf demi huruf muncul di sini (isinya diatur di script: LIRIK) -->
+<div id="panggung"><div id="teks"></div></div>
+
+<!-- ============================================================
+     ▶️ LAYAR AWAL
+     Wajib ada karena browser baru mengizinkan musik setelah pengunjung mengetuk sesuatu.
+     ✏️ EDIT: judul, kalimat kecil, dan tulisan tombol
+     ============================================================ -->
+<div class="layar" id="layarAwal">
+  <h1>Ada pesan untukmu 💜</h1>
+  <p>🎧</p>
+  <button id="tombolMulai">Mulai</button>
+</div>
+
+<!-- ============================================================
+     🔁 LAYAR AKHIR (muncul setelah semua teks selesai)
+     ✏️ EDIT: tulisan di sini
+     ============================================================ -->
+<div class="layar" id="layarAkhir" hidden>
+  <p>Love Youuu DInii💜</p>
+  <button id="tombolUlang">Putar ulang</button>
+</div>
+
+<script>
+  /* ============================================================
+     ⚙️ PENGATURAN
+     ============================================================ */
+
+  // ✏️ EDIT: daftar teks yang tampil satu per satu, urut dari atas ke bawah.
+  //
+  // Ada DUA cara menulis tiap baris (boleh dicampur):
+  //
+  //   A. Teks biasa  →  "teks"
+  //      Jedanya otomatis pakai angka standar (JEDA_STANDAR & TAHAN_STANDAR di bawah).
+  //
+  //   B. Jeda diatur sendiri  →  [jeda_sebelum, "teks", lama_tampil]
+  //        jeda_sebelum : tunggu sekian DETIK sebelum teks ini mulai diketik
+  //                       (baris pertama dihitung sejak lagu mulai,
+  //                        baris lainnya sejak baris sebelumnya hilang)
+  //        lama_tampil  : teks bertahan sekian DETIK setelah selesai diketik
+  //                       (boleh dikosongkan: [jeda_sebelum, "teks"])
+  //
+  //   Contoh:  [3, "Halo"]        → tunggu 3 detik, ketik "Halo", tahan sesuai standar
+  //            [0.5, "Hai", 4]    → tunggu 0,5 detik, ketik "Hai", tahan 4 detik
+  //
+  // Mau tambah baris? Salin satu baris lalu beri koma di akhir.
+  // 💡 Tips: nyalakan TAMPILKAN_WAKTU = true (di bawah) untuk melihat detik lagu saat ini,
+  //          jadi gampang menentukan kapan sebaiknya tiap baris muncul.
+  //
+  // ✏️ Baris di bawah hanya CONTOH. Ganti dengan teks/lirik pilihanmu.
+  const LIRIK = [
+    [1, "You know it's true."],                                   // lagu mulai → tunggu 14,5 detik
+    [1.5,  "Yeah, I miss you"],
+    [2,  "You know it's true",],
+    [2.3, "So what if I call"],
+    [1.8, "And you pick up the phone"],
+    [1.5, "And I use this holiday to make my way to your ghost", 3],
+    [2, "Oh, what if you're lonely"],
+    [1.8, "And you know I am too"],
+    [1.8, "And I get the chance to say"],
+    [0.5, "Merry Christmas, I miss you"],
+    [1.8, "I Miss You"],
+  ];
+
+  // ✏️ EDIT: jeda standar untuk baris yang ditulis dengan cara A (teks biasa), dan lama tampil standar
+  const JEDA_STANDAR = 0.5;        // detik tunggu sebelum teks diketik
+  const TAHAN_STANDAR = 1.2;       // detik teks bertahan setelah selesai diketik
+
+  // ✏️ EDIT: kecepatan mengetik semua baris (detik per huruf; 0.05 cepat, 0.12 pelan)
+  const KECEPATAN_KETIK = 0.07;
+
+  // ✏️ EDIT: teks penutup (lebih besar & dramatis), tampil terakhir lalu memudar
+  const TEKS_AKHIR = "I Will Always Love You 💜";
+  const JEDA_SEBELUM_AKHIR = 1.5;  // detik tunggu sebelum teks penutup mulai diketik
+  const KECEPATAN_AKHIR = 0.1;     // detik per huruf untuk teks penutup
+  const TAHAN_AKHIR = 3.5;         // detik bertahan sebelum layar memudar
+
+  // ✏️ EDIT: true = tampilkan penghitung detik lagu di pojok kiri atas (alat bantu menyusun jeda).
+  // Jangan lupa ganti jadi false kalau webnya sudah dikirim ke orang lain.
+  const TAMPILKAN_WAKTU = false;
+
+  // ✏️ EDIT: tampilan hujan partikel
+  const JUMLAH_PARTIKEL = 140;          // makin banyak makin ramai
+  const KECEPATAN_JATUH = 2.2;          // makin besar makin cepat
+  const PANJANG_JEJAK = 14;             // panjang garis hujan. Isi 0 untuk titik bulat (seperti salju)
+  const WARNA_PARTIKEL = ["#ffffff", "#d9c2ff", "#b794f6", "#ffc2e8"];  // boleh tambah/ganti
+
+  /* ============================================================
+     ⛔ Di bawah ini logika program. Tidak perlu diubah.
+     ============================================================ */
+  const $ = id => document.getElementById(id);
+  const lagu = $("lagu"), teks = $("teks"), panggung = $("panggung");
+  const layarAwal = $("layarAwal"), layarAkhir = $("layarAkhir"), penghitung = $("penghitung");
+  const tidur = detik => new Promise(r => setTimeout(r, detik * 1000));
+  let sesi = 0; // penanda supaya "Putar ulang" membatalkan putaran lama
+
+  /* ---------- Hujan partikel ---------- */
+  const kanvas = $("hujan"), ctx = kanvas.getContext("2d");
+  const kurangiGerak = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let lebar = 0, tinggi = 0;
+  const partikel = [];
+
+  function ukur() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    lebar = innerWidth; tinggi = innerHeight;
+    kanvas.width = lebar * dpr; kanvas.height = tinggi * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  function partikelBaru(acak) {
+    return {
+      x: Math.random() * lebar,
+      y: acak ? Math.random() * tinggi : -20,
+      v: KECEPATAN_JATUH * (0.5 + Math.random()) * (kurangiGerak ? 0.4 : 1),
+      r: 0.8 + Math.random() * 1.6,
+      a: 0.35 + Math.random() * 0.65,
+      w: WARNA_PARTIKEL[Math.floor(Math.random() * WARNA_PARTIKEL.length)],
+    };
+  }
+  function gambar() {
+    ctx.clearRect(0, 0, lebar, tinggi);
+    for (const p of partikel) {
+      p.y += p.v;
+      if (p.y > tinggi + 20) Object.assign(p, partikelBaru(false));
+      ctx.globalAlpha = p.a;
+      ctx.strokeStyle = ctx.fillStyle = p.w;
+      if (PANJANG_JEJAK > 0) {
+        ctx.lineWidth = p.r; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y - PANJANG_JEJAK * (p.v / 3)); ctx.stroke();
+      } else {
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    if (TAMPILKAN_WAKTU) penghitung.textContent = lagu.currentTime.toFixed(1) + " dtk";
+    requestAnimationFrame(gambar);
+  }
+  addEventListener("resize", ukur);
+  ukur();
+  for (let i = 0; i < JUMLAH_PARTIKEL; i++) partikel.push(partikelBaru(true));
+  penghitung.hidden = !TAMPILKAN_WAKTU;
+  gambar();
+
+  /* ---------- Efek mengetik ---------- */
+  async function ketik(kalimat, detikPerHuruf, id) {
+    teks.textContent = "";
+    for (const huruf of [...kalimat]) {          // [...] supaya emoji tidak terpotong
+      if (id !== sesi) return false;
+      teks.textContent += huruf;
+      await tidur(detikPerHuruf);
+    }
+    return id === sesi;
+  }
+
+  /* ---------- Jadwal: ubah LIRIK (cara A / B) jadi data seragam ---------- */
+  function susunJadwal() {
+    return LIRIK.map(x => Array.isArray(x)
+      ? { j: x[0] ?? JEDA_STANDAR, t: x[1], h: x[2] ?? TAHAN_STANDAR }
+      : { j: JEDA_STANDAR,         t: x,    h: TAHAN_STANDAR });
+  }
+
+  /* ---------- Jalankan seluruh pertunjukan ---------- */
+  async function mulai() {
+    const id = ++sesi;
+    layarAwal.classList.add("hilang");
+    layarAwal.inert = true;               // supaya tombol Mulai tidak tertekan lagi lewat SPASI
+    layarAkhir.hidden = true;
+    panggung.classList.remove("pudar");
+    teks.style.fontSize = "";
+    teks.textContent = "";
+
+    lagu.currentTime = 0;
+    lagu.play().catch(() => console.warn("Musik tidak bisa diputar. Cek nama & lokasi file mp3 di tag <audio>."));
+
+    for (const { j: jeda, t: kalimat, h: tahan } of susunJadwal()) {
+      await tidur(jeda);
+      if (id !== sesi) return;
+      if (TAMPILKAN_WAKTU) console.log(lagu.currentTime.toFixed(1) + " dtk →", kalimat);
+      if (!(await ketik(kalimat, KECEPATAN_KETIK, id))) return;
+      await tidur(tahan);
+      if (id !== sesi) return;
+      teks.textContent = "";
+    }
+
+    // Teks penutup
+    await tidur(JEDA_SEBELUM_AKHIR);
+    if (id !== sesi) return;
+    teks.style.fontSize = "clamp(2rem, 8vw, 4.2rem)";
+    if (!(await ketik(TEKS_AKHIR, KECEPATAN_AKHIR, id))) return;
+    await tidur(TAHAN_AKHIR);
+    if (id !== sesi) return;
+    panggung.classList.add("pudar");
+    await tidur(2.5);
+    if (id !== sesi) return;
+    teks.style.fontSize = "";
+    layarAkhir.hidden = false;
+    layarAkhir.classList.remove("hilang");
+  }
+
+  $("tombolMulai").addEventListener("click", mulai);
+  $("tombolUlang").addEventListener("click", () => { lagu.pause(); mulai(); });
+</script>
+</body>
+</html>
